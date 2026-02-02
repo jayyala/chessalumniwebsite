@@ -1,0 +1,208 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Admin — UChicago Chess Alumni</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div class="page">
+    <header>
+      <h1>University of Chicago<br>Chess Club Alumni</h1>
+      <nav>
+        <a href="index.html">Directory</a>
+        &nbsp;&nbsp;|&nbsp;&nbsp;
+        <a href="by-year.html">By Year</a>
+        &nbsp;&nbsp;|&nbsp;&nbsp;
+        <a href="admin.html" class="active">Admin</a>
+      </nav>
+      <hr>
+    </header>
+
+    <!-- login gate -->
+    <div id="loginGate">
+      <h2>Admin Login</h2>
+      <p class="admin-note">Enter the admin password to manage alumni records.</p>
+      <div class="login-form">
+        <input type="password" id="passwordInput" placeholder="Password" onkeydown="if(event.key==='Enter') attemptLogin()">
+        <button onclick="attemptLogin()">Log in</button>
+      </div>
+      <p id="loginError" class="error" style="display:none">Incorrect password.</p>
+    </div>
+
+    <!-- admin panel -->
+    <div id="adminPanel" style="display:none">
+      <div class="admin-header-row">
+        <h2>Manage Alumni</h2>
+        <button class="btn-secondary" onclick="logout()">Log out</button>
+      </div>
+
+      <h3>Add Alumni</h3>
+      <form id="addForm" onsubmit="addAlumnus(event)">
+        <div class="form-grid">
+          <label>Name <span class="req">*</span><input type="text" id="fName" required></label>
+          <label>Graduation Year <span class="req">*</span><input type="number" id="fYear" required min="1900" max="2099"></label>
+          <label>Email<input type="email" id="fEmail"></label>
+          <label>Phone<input type="text" id="fPhone"></label>
+          <label class="full">Notes<input type="text" id="fNotes"></label>
+        </div>
+        <button type="submit">Add</button>
+      </form>
+      <p id="addMsg" class="msg" style="display:none"></p>
+
+      <hr>
+
+      <h3>Current Alumni</h3>
+      <div id="adminList">
+        <p class="loading">Loading...</p>
+      </div>
+    </div>
+
+    <footer>
+      <hr>
+      <p class="footer-note">University of Chicago Chess Club Alumni Directory</p>
+    </footer>
+  </div>
+
+  <script>
+    let password = '';
+    let alumni = [];
+
+    /* ---- auth ---- */
+    async function attemptLogin() {
+      const input = document.getElementById('passwordInput');
+      try {
+        const res = await fetch('/api/auth', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ password: input.value })
+        });
+        if (res.ok) {
+          password = input.value;
+          input.value = '';
+          document.getElementById('loginGate').style.display  = 'none';
+          document.getElementById('adminPanel').style.display = 'block';
+          loadAlumni();
+          return;
+        }
+      } catch { /* fall through */ }
+      document.getElementById('loginError').style.display = 'block';
+      input.value = '';
+      input.focus();
+    }
+
+    function logout() {
+      password = '';
+      document.getElementById('loginGate').style.display  = 'block';
+      document.getElementById('adminPanel').style.display = 'none';
+    }
+
+    /* ---- data ---- */
+    async function loadAlumni() {
+      try {
+        const res = await fetch('/api/alumni');
+        alumni = await res.json();
+      } catch {
+        alumni = [];
+      }
+      renderAdminList();
+    }
+
+    async function addAlumnus(e) {
+      e.preventDefault();
+      const res = await fetch('/api/alumni', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer ' + password
+        },
+        body: JSON.stringify({
+          name:            document.getElementById('fName').value.trim(),
+          graduation_year: document.getElementById('fYear').value,
+          email:           document.getElementById('fEmail').value.trim(),
+          phone:           document.getElementById('fPhone').value.trim(),
+          notes:           document.getElementById('fNotes').value.trim()
+        })
+      });
+
+      if (res.ok) {
+        document.getElementById('addForm').reset();
+        showMsg('Added successfully.', true);
+        loadAlumni();
+      } else {
+        const err = await res.json().catch(() => ({}));
+        showMsg(err.error || 'Add failed.', false);
+      }
+    }
+
+    async function deleteAlumnus(id) {
+      if (!confirm('Remove this entry?')) return;
+      const res = await fetch('/api/alumni/' + id, {
+        method: 'DELETE',
+        headers: { 'Authorization': 'Bearer ' + password }
+      });
+      if (res.ok) {
+        showMsg('Entry removed.', true);
+        loadAlumni();
+      } else {
+        showMsg('Delete failed.', false);
+      }
+    }
+
+    /* ---- render ---- */
+    function renderAdminList() {
+      const wrap = document.getElementById('adminList');
+
+      if (alumni.length === 0) {
+        wrap.innerHTML = '<p class="empty">No alumni on record.</p>';
+        return;
+      }
+
+      const sorted = [...alumni].sort((a, b) =>
+        b.graduation_year - a.graduation_year || a.name.localeCompare(b.name)
+      );
+
+      let html = '<table><thead><tr>'
+        + '<th>Name</th>'
+        + '<th>Email</th>'
+        + '<th>Phone</th>'
+        + '<th class="col-year">Year</th>'
+        + '<th>Notes</th>'
+        + '<th class="col-del"></th>'
+        + '</tr></thead><tbody>';
+
+      sorted.forEach(a => {
+        html += '<tr>'
+          + '<td>' + esc(a.name) + '</td>'
+          + '<td>' + (a.email ? '<a href="mailto:' + esc(a.email) + '">' + esc(a.email) + '</a>' : '&#8212;') + '</td>'
+          + '<td>' + (a.phone ? esc(a.phone) : '&#8212;') + '</td>'
+          + '<td class="col-year">' + a.graduation_year + '</td>'
+          + '<td>' + (a.notes ? esc(a.notes) : '&#8212;') + '</td>'
+          + '<td><button class="del-link" onclick="deleteAlumnus(' + a.id + ')">&#10005;</button></td>'
+          + '</tr>';
+      });
+
+      html += '</tbody></table>';
+      wrap.innerHTML = html;
+    }
+
+    function showMsg(text, success) {
+      const el = document.getElementById('addMsg');
+      el.textContent = text;
+      el.className = 'msg ' + (success ? 'success' : 'fail');
+      el.style.display = 'block';
+      clearTimeout(el._timer);
+      el._timer = setTimeout(() => { el.style.display = 'none'; }, 3000);
+    }
+
+    function esc(s) {
+      return String(s)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;');
+    }
+  </script>
+</body>
+</html>

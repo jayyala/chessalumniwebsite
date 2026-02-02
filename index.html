@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>University of Chicago Chess Club — Alumni Directory</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div class="page">
+    <header>
+      <h1>University of Chicago<br>Chess Club Alumni</h1>
+      <nav>
+        <a href="index.html" class="active">Directory</a>
+        &nbsp;&nbsp;|&nbsp;&nbsp;
+        <a href="by-year.html">By Year</a>
+        &nbsp;&nbsp;|&nbsp;&nbsp;
+        <a href="admin.html">Admin</a>
+      </nav>
+      <hr>
+    </header>
+
+    <div class="controls">
+      <input type="text" id="searchInput" placeholder="Search by name, year, or email..." oninput="filter()">
+    </div>
+
+    <div id="alumniList">
+      <p class="loading">Loading...</p>
+    </div>
+
+    <footer>
+      <hr>
+      <p class="footer-note">University of Chicago Chess Club Alumni Directory</p>
+    </footer>
+  </div>
+
+  <script>
+    let alumni = [];
+
+    async function load() {
+      try {
+        const res = await fetch('/api/alumni');
+        alumni = await res.json();
+      } catch {
+        alumni = [];
+      }
+      render(alumni);
+    }
+
+    function render(data) {
+      const wrap = document.getElementById('alumniList');
+
+      if (data.length === 0) {
+        wrap.innerHTML = '<p class="empty">No alumni on record.</p>';
+        return;
+      }
+
+      const byYear = {};
+      data.forEach(a => {
+        (byYear[a.graduation_year] = byYear[a.graduation_year] || []).push(a);
+      });
+      const years = Object.keys(byYear).map(Number).sort((a, b) => b - a);
+
+      let html = '<table><thead><tr>'
+        + '<th>Name</th>'
+        + '<th>Email</th>'
+        + '<th>Phone</th>'
+        + '<th class="col-year">Year</th>'
+        + '<th>Notes</th>'
+        + '</tr></thead><tbody>';
+
+      years.forEach(year => {
+        html += '<tr class="year-row"><td colspan="5">Class of ' + year + '</td></tr>';
+        byYear[year]
+          .sort((a, b) => a.name.localeCompare(b.name))
+          .forEach(a => {
+            html += '<tr>'
+              + '<td>' + esc(a.name) + '</td>'
+              + '<td>' + (a.email ? '<a href="mailto:' + esc(a.email) + '">' + esc(a.email) + '</a>' : '&#8212;') + '</td>'
+              + '<td>' + (a.phone ? esc(a.phone) : '&#8212;') + '</td>'
+              + '<td class="col-year">' + a.graduation_year + '</td>'
+              + '<td>' + (a.notes ? esc(a.notes) : '&#8212;') + '</td>'
+              + '</tr>';
+          });
+      });
+
+      html += '</tbody></table>';
+      wrap.innerHTML = html;
+    }
+
+    function filter() {
+      const q = document.getElementById('searchInput').value.trim().toLowerCase();
+      if (!q) { render(alumni); return; }
+      render(alumni.filter(a =>
+        a.name.toLowerCase().includes(q) ||
+        String(a.graduation_year).includes(q) ||
+        (a.email || '').toLowerCase().includes(q) ||
+        (a.notes || '').toLowerCase().includes(q)
+      ));
+    }
+
+    function esc(s) {
+      return String(s)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;');
+    }
+
+    load();
+  </script>
+</body>
+</html>

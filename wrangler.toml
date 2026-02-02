@@ -1,0 +1,5 @@
+name = "uchicago-chess-alumni"
+
+[[kv_namespaces]]
+binding = "ALUMNI_KV"
+id      = "your-kv-namespace-id"
