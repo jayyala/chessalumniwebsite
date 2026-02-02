@@ -1,4 +1,5 @@
-name = "uchicago-chess-alumni"
+name                   = "uchicago-chess-alumni"
+pages_build_output_dir = "."
 
 [[kv_namespaces]]
 binding = "ALUMNI_KV"
