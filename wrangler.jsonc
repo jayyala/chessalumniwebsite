@@ -1,5 +1,11 @@
 {
   "name": "uchicago-chess-alumni",
   "compatibility_date": "2026-01-01",
-  "pages_build_output_dir": "./public"
+  "pages_build_output_dir": "./public",
+  "kv_namespaces": [
+    {
+      "binding": "ALUMNI_KV",
+      "id": "9228db863f044108bfb9a038b06fa4e4"
+    }
+  ]
 }
