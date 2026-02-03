@@ -13,8 +13,6 @@
       <nav>
         <a href="index.html" class="active">Directory</a>
         &nbsp;&nbsp;|&nbsp;&nbsp;
-        <a href="by-year.html">By Year</a>
-        &nbsp;&nbsp;|&nbsp;&nbsp;
         <a href="admin.html">Admin</a>
       </nav>
       <hr>
@@ -40,7 +38,9 @@
     async function load() {
       try {
         const res = await fetch('/api/alumni');
+        if (!res.ok) throw new Error('API error');
         alumni = await res.json();
+        if (!Array.isArray(alumni)) alumni = [];
       } catch {
         alumni = [];
       }
