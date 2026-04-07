@@ -1,0 +1,9 @@
+{
+  "name": "uchicago-chess-alumni",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "jose": "^6.0.0"
+  }
+}
+

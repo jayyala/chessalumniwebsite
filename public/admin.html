@@ -13,48 +13,60 @@
       <nav>
         <a href="index.html">Directory</a>
         &nbsp;&nbsp;|&nbsp;&nbsp;
+        <a href="contribute.html">Share Info</a>
+        &nbsp;&nbsp;|&nbsp;&nbsp;
         <a href="admin.html" class="active">Admin</a>
       </nav>
       <hr>
     </header>
 
-    <!-- login gate -->
-    <div id="loginGate">
-      <h2>Admin Login</h2>
-      <p class="admin-note">Enter the admin password to manage alumni records.</p>
-      <div class="login-form">
-        <input type="password" id="passwordInput" placeholder="Password" onkeydown="if(event.key==='Enter') attemptLogin()">
-        <button onclick="attemptLogin()">Log in</button>
-      </div>
-      <p id="loginError" class="error" style="display:none">Incorrect password.</p>
-    </div>
+    <section class="panel">
+      <h2>Admin Console</h2>
+      <p class="admin-note">This page expects Cloudflare Access in front of it. Admin rights come from the server-side <code>ADMIN_EMAILS</code> allowlist.</p>
+      <p id="accessState" class="status status-muted">Checking Cloudflare Access session...</p>
+    </section>
 
-    <!-- admin panel -->
-    <div id="adminPanel" style="display:none">
-      <div class="admin-header-row">
-        <h2>Manage Alumni</h2>
-        <button class="btn-secondary" onclick="logout()">Log out</button>
-      </div>
-
-      <h3>Add Alumni</h3>
-      <form id="addForm" onsubmit="addAlumnus(event)">
-        <div class="form-grid">
-          <label>Name <span class="req">*</span><input type="text" id="fName" required></label>
-          <label>Graduation Year <span class="req">*</span><input type="number" id="fYear" required min="1900" max="2099"></label>
-          <label>Email<input type="email" id="fEmail"></label>
-          <label>Phone<input type="text" id="fPhone"></label>
-          <label class="full">Notes<input type="text" id="fNotes"></label>
+    <div id="adminShell" hidden>
+      <section class="panel">
+        <div class="section-head">
+          <div>
+            <h3>Whitelist Emails</h3>
+            <p class="admin-note">Only whitelisted emails can submit alumni information.</p>
+          </div>
         </div>
-        <button type="submit">Add</button>
-      </form>
-      <p id="addMsg" class="msg" style="display:none"></p>
 
-      <hr>
+        <form id="whitelistForm" class="inline-form" onsubmit="addWhitelistEntry(event)">
+          <input type="email" id="whitelistEmail" placeholder="name@example.com" required>
+          <button type="submit">Whitelist</button>
+        </form>
+        <p id="whitelistMsg" class="msg" hidden></p>
 
-      <h3>Current Alumni</h3>
-      <div id="adminList">
-        <p class="loading">Loading...</p>
-      </div>
+        <div id="whitelistList" class="table-wrap">
+          <p class="loading">Loading whitelist...</p>
+        </div>
+      </section>
+
+      <section class="panel">
+        <h3>Add Alumni Record</h3>
+        <form id="addForm" onsubmit="addAlumnus(event)">
+          <div class="form-grid">
+            <label>Name <span class="req">*</span><input type="text" id="fName" required></label>
+            <label>Graduation Year <span class="req">*</span><input type="number" id="fYear" required min="1900" max="2099"></label>
+            <label>Email<input type="email" id="fEmail"></label>
+            <label>Phone<input type="text" id="fPhone"></label>
+            <label class="full">Notes<input type="text" id="fNotes"></label>
+          </div>
+          <button type="submit">Add Alumni</button>
+        </form>
+        <p id="addMsg" class="msg" hidden></p>
+      </section>
+
+      <section class="panel">
+        <h3>Current Alumni</h3>
+        <div id="adminList" class="table-wrap">
+          <p class="loading">Loading alumni...</p>
+        </div>
+      </section>
     </div>
 
     <footer>
@@ -64,97 +76,143 @@
   </div>
 
   <script>
-    let password = '';
     let alumni = [];
+    let whitelist = [];
+    let session = null;
 
-    /* ---- auth ---- */
-    async function attemptLogin() {
-      const input = document.getElementById('passwordInput');
+    async function init() {
       try {
-        const res = await fetch('/api/auth', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ password: input.value })
-        });
-        if (res.ok) {
-          password = input.value;
-          input.value = '';
-          document.getElementById('loginGate').style.display  = 'none';
-          document.getElementById('adminPanel').style.display = 'block';
-          loadAlumni();
-          return;
-        }
-      } catch { /* fall through */ }
-      document.getElementById('loginError').style.display = 'block';
-      input.value = '';
-      input.focus();
-    }
-
-    function logout() {
-      password = '';
-      document.getElementById('loginGate').style.display  = 'block';
-      document.getElementById('adminPanel').style.display = 'none';
-    }
-
-    /* ---- data ---- */
-    async function loadAlumni() {
-      try {
-        const res = await fetch('/api/alumni');
-        if (!res.ok) throw new Error('API error');
-        alumni = await res.json();
-        if (!Array.isArray(alumni)) alumni = [];
-      } catch {
-        alumni = [];
+        session = await api('/api/auth');
+      } catch (error) {
+        setStatus(error.message, false);
+        return;
       }
-      renderAdminList();
+
+      if (!session.permissions.is_admin) {
+        setStatus(session.user.email + ' is signed in, but this account is not listed in ADMIN_EMAILS.', false);
+        return;
+      }
+
+      document.getElementById('adminShell').hidden = false;
+      setStatus('Signed in via Cloudflare Access as ' + session.user.email + '.', true);
+      await loadData();
     }
 
-    async function addAlumnus(e) {
-      e.preventDefault();
-      const res = await fetch('/api/alumni', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': 'Bearer ' + password
-        },
-        body: JSON.stringify({
-          name:            document.getElementById('fName').value.trim(),
-          graduation_year: document.getElementById('fYear').value,
-          email:           document.getElementById('fEmail').value.trim(),
-          phone:           document.getElementById('fPhone').value.trim(),
-          notes:           document.getElementById('fNotes').value.trim()
-        })
-      });
+    async function loadData() {
+      try {
+        const [whitelistData, alumniData] = await Promise.all([
+          api('/api/whitelist'),
+          api('/api/alumni')
+        ]);
 
-      if (res.ok) {
+        whitelist = Array.isArray(whitelistData.entries) ? whitelistData.entries : [];
+        alumni = Array.isArray(alumniData) ? alumniData : [];
+        renderWhitelist();
+        renderAdminList();
+      } catch (error) {
+        setStatus(error.message, false);
+      }
+    }
+
+    async function addWhitelistEntry(event) {
+      event.preventDefault();
+      const input = document.getElementById('whitelistEmail');
+
+      try {
+        await api('/api/whitelist', {
+          method: 'POST',
+          body: JSON.stringify({ email: input.value.trim() })
+        });
+        input.value = '';
+        showMsg('whitelistMsg', 'Email whitelisted.', true);
+        await loadData();
+      } catch (error) {
+        showMsg('whitelistMsg', error.message, false);
+      }
+    }
+
+    async function removeWhitelistEntry(email) {
+      if (!confirm('Remove ' + email + ' from the whitelist?')) return;
+
+      try {
+        await api('/api/whitelist', {
+          method: 'DELETE',
+          body: JSON.stringify({ email })
+        });
+        showMsg('whitelistMsg', 'Whitelist entry removed.', true);
+        await loadData();
+      } catch (error) {
+        showMsg('whitelistMsg', error.message, false);
+      }
+    }
+
+    async function addAlumnus(event) {
+      event.preventDefault();
+
+      try {
+        await api('/api/alumni', {
+          method: 'POST',
+          body: JSON.stringify({
+            name: document.getElementById('fName').value.trim(),
+            graduation_year: document.getElementById('fYear').value,
+            email: document.getElementById('fEmail').value.trim(),
+            phone: document.getElementById('fPhone').value.trim(),
+            notes: document.getElementById('fNotes').value.trim()
+          })
+        });
+
         document.getElementById('addForm').reset();
-        showMsg('Added successfully.', true);
-        loadAlumni();
-      } else {
-        const err = await res.json().catch(() => ({}));
-        showMsg(err.error || 'Add failed.', false);
+        showMsg('addMsg', 'Alumni record added.', true);
+        await loadData();
+      } catch (error) {
+        showMsg('addMsg', error.message, false);
       }
     }
 
     async function deleteAlumnus(id) {
-      if (!confirm('Remove this entry?')) return;
-      const res = await fetch('/api/alumni/' + id, {
-        method: 'DELETE',
-        headers: { 'Authorization': 'Bearer ' + password }
-      });
-      if (res.ok) {
-        showMsg('Entry removed.', true);
-        loadAlumni();
-      } else {
-        showMsg('Delete failed.', false);
+      if (!confirm('Remove this alumni entry?')) return;
+
+      try {
+        await api('/api/alumni/' + id, { method: 'DELETE' });
+        showMsg('addMsg', 'Alumni record removed.', true);
+        await loadData();
+      } catch (error) {
+        showMsg('addMsg', error.message, false);
       }
     }
 
-    /* ---- render ---- */
+    function renderWhitelist() {
+      const wrap = document.getElementById('whitelistList');
+
+      if (!whitelist.length) {
+        wrap.innerHTML = '<p class="empty">No whitelisted contributors yet.</p>';
+        return;
+      }
+
+      let html = '<table><thead><tr>'
+        + '<th>Email</th>'
+        + '<th>Added By</th>'
+        + '<th>Added</th>'
+        + '<th class="col-del"></th>'
+        + '</tr></thead><tbody>';
+
+      whitelist.forEach(entry => {
+        html += '<tr>'
+          + '<td class="mono">' + esc(entry.email) + '</td>'
+          + '<td>' + (entry.added_by ? esc(entry.added_by) : '&#8212;') + '</td>'
+          + '<td>' + (entry.created_at ? esc(formatDate(entry.created_at)) : '&#8212;') + '</td>'
+          + '<td><button class="del-link" onclick=\'removeWhitelistEntry(' + JSON.stringify(entry.email) + ')\'>&#10005;</button></td>'
+          + '</tr>';
+      });
+
+      html += '</tbody></table>';
+      wrap.innerHTML = html;
+    }
+
     function renderAdminList() {
       const wrap = document.getElementById('adminList');
 
-      if (alumni.length === 0) {
+      if (!alumni.length) {
         wrap.innerHTML = '<p class="empty">No alumni on record.</p>';
         return;
       }
@@ -165,21 +223,27 @@
 
       let html = '<table><thead><tr>'
         + '<th>Name</th>'
-        + '<th>Email</th>'
-        + '<th>Phone</th>'
+        + '<th>Contact</th>'
         + '<th class="col-year">Year</th>'
         + '<th>Notes</th>'
+        + '<th>Submitted By</th>'
         + '<th class="col-del"></th>'
         + '</tr></thead><tbody>';
 
-      sorted.forEach(a => {
+      sorted.forEach(entry => {
         html += '<tr>'
-          + '<td>' + esc(a.name) + '</td>'
-          + '<td>' + (a.email ? '<a href="mailto:' + esc(a.email) + '">' + esc(a.email) + '</a>' : '&#8212;') + '</td>'
-          + '<td>' + (a.phone ? esc(a.phone) : '&#8212;') + '</td>'
-          + '<td class="col-year">' + a.graduation_year + '</td>'
-          + '<td>' + (a.notes ? esc(a.notes) : '&#8212;') + '</td>'
-          + '<td><button class="del-link" onclick="deleteAlumnus(' + a.id + ')">&#10005;</button></td>'
+          + '<td>' + esc(entry.name) + '</td>'
+          + '<td>'
+            + (entry.email ? '<div><a href="mailto:' + esc(entry.email) + '">' + esc(entry.email) + '</a></div>' : '<div>&#8212;</div>')
+            + (entry.phone ? '<div class="muted">' + esc(entry.phone) + '</div>' : '')
+          + '</td>'
+          + '<td class="col-year">' + entry.graduation_year + '</td>'
+          + '<td>' + (entry.notes ? esc(entry.notes) : '&#8212;') + '</td>'
+          + '<td>'
+            + (entry.submitted_by ? '<div>' + esc(entry.submitted_by) + '</div>' : '&#8212;')
+            + (entry.created_at ? '<div class="muted">' + esc(formatDate(entry.created_at)) + '</div>' : '')
+          + '</td>'
+          + '<td><button class="del-link" onclick="deleteAlumnus(' + entry.id + ')">&#10005;</button></td>'
           + '</tr>';
       });
 
@@ -187,22 +251,58 @@
       wrap.innerHTML = html;
     }
 
-    function showMsg(text, success) {
-      const el = document.getElementById('addMsg');
-      el.textContent = text;
-      el.className = 'msg ' + (success ? 'success' : 'fail');
-      el.style.display = 'block';
-      clearTimeout(el._timer);
-      el._timer = setTimeout(() => { el.style.display = 'none'; }, 3000);
+    async function api(url, options = {}) {
+      const config = { ...options };
+      config.headers = { ...(options.headers || {}) };
+
+      if (config.body && !config.headers['Content-Type']) {
+        config.headers['Content-Type'] = 'application/json';
+      }
+
+      const response = await fetch(url, config);
+      const data = await response.json().catch(() => ({}));
+
+      if (!response.ok) {
+        throw new Error(data.error || 'Request failed.');
+      }
+
+      return data;
     }
 
-    function esc(s) {
-      return String(s)
+    function setStatus(message, success) {
+      const el = document.getElementById('accessState');
+      el.textContent = message;
+      el.className = 'status ' + (success ? 'status-success' : 'status-fail');
+    }
+
+    function showMsg(id, text, success) {
+      const el = document.getElementById(id);
+      el.textContent = text;
+      el.className = 'msg ' + (success ? 'success' : 'fail');
+      el.hidden = false;
+      clearTimeout(el._timer);
+      el._timer = setTimeout(() => {
+        el.hidden = true;
+      }, 4000);
+    }
+
+    function formatDate(value) {
+      const date = new Date(value);
+      if (Number.isNaN(date.getTime())) {
+        return value;
+      }
+      return date.toLocaleString();
+    }
+
+    function esc(value) {
+      return String(value)
         .replace(/&/g, '&amp;')
         .replace(/</g, '&lt;')
         .replace(/>/g, '&gt;')
         .replace(/"/g, '&quot;');
     }
+
+    init();
   </script>
 </body>
 </html>

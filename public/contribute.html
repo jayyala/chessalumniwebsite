@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Share Info — UChicago Chess Alumni</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div class="page">
+    <header>
+      <h1>University of Chicago<br>Chess Club Alumni</h1>
+      <nav>
+        <a href="index.html">Directory</a>
+        &nbsp;&nbsp;|&nbsp;&nbsp;
+        <a href="contribute.html" class="active">Share Info</a>
+        &nbsp;&nbsp;|&nbsp;&nbsp;
+        <a href="admin.html">Admin</a>
+      </nav>
+      <hr>
+    </header>
+
+    <section class="panel">
+      <h2>Share Your Update</h2>
+      <p class="admin-note">This page is intended to sit behind Cloudflare Access. After signing in, the server checks whether your email is on the contributor whitelist.</p>
+      <p id="contribStatus" class="status status-muted">Checking Cloudflare Access session...</p>
+    </section>
+
+    <section id="contribFormPanel" class="panel" hidden>
+      <h3>Submit Alumni Information</h3>
+      <form id="contribForm" onsubmit="submitInfo(event)">
+        <div class="form-grid">
+          <label>Name <span class="req">*</span><input type="text" id="fName" required></label>
+          <label>Graduation Year <span class="req">*</span><input type="number" id="fYear" required min="1900" max="2099"></label>
+          <label>Email<input type="email" id="fEmail"></label>
+          <label>Phone<input type="text" id="fPhone"></label>
+          <label class="full">Notes<input type="text" id="fNotes" placeholder="Career update, city, achievements, or a short note"></label>
+        </div>
+        <button type="submit">Submit</button>
+      </form>
+      <p id="contribMsg" class="msg" hidden></p>
+    </section>
+
+    <footer>
+      <hr>
+      <p class="footer-note">University of Chicago Chess Club Alumni Directory</p>
+    </footer>
+  </div>
+
+  <script>
+    async function init() {
+      try {
+        const session = await api('/api/auth');
+
+        if (!session.permissions.can_post) {
+          setStatus(
+            session.user.email + ' is signed in, but this email has not been whitelisted for submissions yet.',
+            false
+          );
+          return;
+        }
+
+        setStatus('Signed in via Cloudflare Access as ' + session.user.email + '.', true);
+        document.getElementById('contribFormPanel').hidden = false;
+      } catch (error) {
+        setStatus(error.message, false);
+      }
+    }
+
+    async function submitInfo(event) {
+      event.preventDefault();
+
+      try {
+        await api('/api/alumni', {
+          method: 'POST',
+          body: JSON.stringify({
+            name: document.getElementById('fName').value.trim(),
+            graduation_year: document.getElementById('fYear').value,
+            email: document.getElementById('fEmail').value.trim(),
+            phone: document.getElementById('fPhone').value.trim(),
+            notes: document.getElementById('fNotes').value.trim()
+          })
+        });
+
+        document.getElementById('contribForm').reset();
+        showMsg('contribMsg', 'Thanks. Your alumni information has been posted.', true);
+      } catch (error) {
+        showMsg('contribMsg', error.message, false);
+      }
+    }
+
+    async function api(url, options = {}) {
+      const config = { ...options };
+      config.headers = { ...(options.headers || {}) };
+
+      if (config.body && !config.headers['Content-Type']) {
+        config.headers['Content-Type'] = 'application/json';
+      }
+
+      const response = await fetch(url, config);
+      const data = await response.json().catch(() => ({}));
+
+      if (!response.ok) {
+        throw new Error(data.error || 'Request failed.');
+      }
+
+      return data;
+    }
+
+    function setStatus(message, success) {
+      const el = document.getElementById('contribStatus');
+      el.textContent = message;
+      el.className = 'status ' + (success ? 'status-success' : 'status-fail');
+    }
+
+    function showMsg(id, text, success) {
+      const el = document.getElementById(id);
+      el.textContent = text;
+      el.className = 'msg ' + (success ? 'success' : 'fail');
+      el.hidden = false;
+      clearTimeout(el._timer);
+      el._timer = setTimeout(() => {
+        el.hidden = true;
+      }, 4000);
+    }
+
+    init();
+  </script>
+</body>
+</html>

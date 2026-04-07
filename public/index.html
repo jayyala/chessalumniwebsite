@@ -13,16 +13,23 @@
       <nav>
         <a href="index.html" class="active">Directory</a>
         &nbsp;&nbsp;|&nbsp;&nbsp;
+        <a href="contribute.html">Share Info</a>
+        &nbsp;&nbsp;|&nbsp;&nbsp;
         <a href="admin.html">Admin</a>
       </nav>
       <hr>
     </header>
 
+    <section class="panel intro-panel">
+      <p class="lede">A searchable alumni directory for former University of Chicago Chess Club members.</p>
+      <p class="admin-note">Need to add or update a record? Use <a href="contribute.html">Share Info</a> and sign in through Cloudflare Access with a whitelisted email.</p>
+    </section>
+
     <div class="controls">
       <input type="text" id="searchInput" placeholder="Search by name, year, or email..." oninput="filter()">
     </div>
 
-    <div id="alumniList">
+    <div id="alumniList" class="table-wrap">
       <p class="loading">Loading...</p>
     </div>
 

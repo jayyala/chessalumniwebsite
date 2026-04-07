@@ -1,18 +1,21 @@
-export async function onRequestPost({ request, env }) {
-  if (!env.ADMIN_PASSWORD) {
-    return Response.json({ error: 'ADMIN_PASSWORD environment variable is not set.' }, { status: 500 });
-  }
+import { errorResponse, getUserContext, json } from '../_lib/app.js';
 
-  let body;
+export async function onRequestGet({ request, env }) {
   try {
-    body = await request.json();
-  } catch {
-    return Response.json({ error: 'Invalid request body.' }, { status: 400 });
-  }
+    const user = await getUserContext(request, env);
 
-  if (body.password === env.ADMIN_PASSWORD) {
-    return Response.json({ ok: true });
+    return json({
+      auth_provider: 'cloudflare-access',
+      user: {
+        email: user.email,
+        name: user.name
+      },
+      permissions: {
+        is_admin: user.isAdmin,
+        can_post: user.canPost
+      }
+    });
+  } catch (error) {
+    return errorResponse(error);
   }
-
-  return Response.json({ error: 'Invalid password.' }, { status: 401 });
 }
